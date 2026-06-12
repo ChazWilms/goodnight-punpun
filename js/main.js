@@ -4,6 +4,7 @@
 async function runChapter(n) {
   const ch = PP.chapterList[n - 1];
   if (!ch) throw new Error('no chapter ' + n);
+  PP.curCh = n;
   // reset per-chapter state
   PP.flags = {}; PP.gates = {};
   PP.mode = 'cutscene';
@@ -92,11 +93,26 @@ function startTestPump() {
   const mc = new MessageChannel();
   mc.port1.onmessage = () => {
     if (PP.testDone) return;                       // chapter run finished
+    // in-page screenshots: ?shots=4,9,15 → render + POST canvas at those gameTimes
+    if (PP.shotList && PP.shotList.length && PP.gameTime >= PP.shotList[0]) {
+      const t = PP.shotList.shift();
+      draw();
+      try {
+        fetch('/__shot', {
+          method: 'POST',
+          body: JSON.stringify({ name: 'ch' + (PP.curCh || 0) + '_t' + t, data: PP.canvas.toDataURL('image/png') }),
+        }).catch(() => {});
+      } catch (e) { /* ignore */ }
+    }
     if (PP.shotAt && PP.gameTime >= PP.shotAt) {   // frozen for screenshot
       PP.status('FROZEN gt=' + PP.gameTime.toFixed(2) + ' map=' + PP.world.mapId);
       return;
     }
-    if (PP.gameTime > 3600) { PP.status('ERR test timeout in ' + (PP.world.mapId || '?')); document.title = 'ERR timeout'; return; }
+    if (PP.gameTime > 1200) { PP.status('ERR test timeout in ' + (PP.world.mapId || '?') + ' text=' + PP.text.active + ' cap=' + PP.caption.active); return; }
+    if (PP.gameTime - (PP._hb || 0) > 30) {
+      PP._hb = PP.gameTime;
+      PP.status('hb gt=' + PP.gameTime.toFixed(0) + ' map=' + PP.world.mapId);
+    }
     for (let i = 0; i < 6; i++) update(DT);
     mc.port2.postMessage(0);
   };
@@ -111,6 +127,7 @@ function startTestPump() {
   PP.test = q.has('test');
   if (PP.test) PP.audio.disabled = true;
   PP.shotAt = parseFloat(q.get('shot') || '0') || 0; // freeze game at this gameTime (seconds)
+  PP.shotList = (q.get('shots') || '').split(',').map(Number).filter(x => x > 0).sort((a, b) => a - b);
 
   try { await document.fonts.load('8px "Press Start 2P"'); } catch (e) { /* fallback font */ }
   PP.art.buildCast();

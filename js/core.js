@@ -26,6 +26,11 @@ PP.registerChapter = (n, title, fn) => { PP.chapterList[n - 1] = { title, fn }; 
 PP.status = (s) => {
   const el = document.getElementById('test-status');
   if (el) el.textContent = s;
+  // beacon for headless verify: lands in the http server's access log
+  if (PP.test && s !== PP._lastBeacon) {
+    PP._lastBeacon = s;
+    try { fetch('/__status/' + encodeURIComponent(s)).catch(() => {}); } catch (e) { /* ignore */ }
+  }
 };
 PP.reportError = (e) => {
   const msg = 'ERR ' + (e && e.stack ? e.stack.split('\n').slice(0, 2).join(' | ') : e);
